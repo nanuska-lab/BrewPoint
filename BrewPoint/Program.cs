@@ -13,71 +13,28 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Convert Render's PostgreSQL URL to Npgsql connection string
-var databaseUrl = builder.Configuration.GetConnectionString("DefaultConnection");
-if (databaseUrl != null && databaseUrl.StartsWith("postgresql://"))
+// ── Database ──────────────────────────────────────────────
+string connectionString;
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+if (!string.IsNullOrEmpty(databaseUrl) && databaseUrl.StartsWith("postgresql://"))
 {
     var uri = new Uri(databaseUrl);
     var userInfo = uri.UserInfo.Split(':');
-    databaseUrl = $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
-    builder.Configuration["ConnectionStrings:DefaultConnection"] = databaseUrl;
+    connectionString = $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
+}
+else
+{
+    connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
 }
 
-// Database
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
-// Identity
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
-{
-    options.Password.RequireDigit = true;
-    options.Password.RequiredLength = 6;
-    options.Password.RequireNonAlphanumeric = false;
-    options.Password.RequireUppercase = false;
-})
-.AddEntityFrameworkStores<AppDbContext>()
-.AddDefaultTokenProviders();
-
-// JWT Authentication
-var jwtKey = builder.Configuration["Jwt:Key"]!;
-var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
-var jwtAudience = builder.Configuration["Jwt:Audience"]!;
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtIssuer,
-        ValidAudience = jwtAudience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
-    };
-});
-
-builder.Services.AddAuthorization();
-
-// Repositories
-builder.Services.AddScoped<ICoffeeRepository, CoffeeRepository>();
-builder.Services.AddScoped<IOrderRepository, OrderRepository>();
-builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
-
-// Services
-builder.Services.AddScoped<ICoffeeService, CoffeeService>();
-builder.Services.AddScoped<IOrderService, OrderService>();
-builder.Services.AddScoped<IAuthService, AuthService>();
-
-
+// ── Controllers + Razor Views ──────────────────────────────
 builder.Services.AddControllersWithViews();
 
-// Swagger
+// ── Swagger ───────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -108,19 +65,38 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Seed roles on startup
-// Seed roles on startup
+// ── Auto Migrate + Seed ────────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
+    // Run migrations automatically on startup
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+    // Seed roles
     foreach (var role in new[] { "Admin", "User" })
     {
         if (!await roleManager.RoleExistsAsync(role))
             await roleManager.CreateAsync(new IdentityRole(role));
     }
 
-    // ── Seed Ingredients ──────────────────────────────────
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    // Seed default admin
+    var adminEmail = "admin@brewpoint.com";
+    if (await userManager.FindByEmailAsync(adminEmail) == null)
+    {
+        var admin = new ApplicationUser
+        {
+            UserName = adminEmail,
+            Email = adminEmail,
+            FullName = "Admin"
+        };
+        await userManager.CreateAsync(admin, "Admin123!");
+        await userManager.AddToRoleAsync(admin, "Admin");
+    }
+
+    // Seed Ingredients
 
     if (!db.Ingredients.Any())
     {
@@ -138,7 +114,7 @@ using (var scope = app.Services.CreateScope())
         await db.SaveChangesAsync();
     }
 
-    // ── Seed Coffees ───────────────────────────────────────
+    // Seed Coffees
     if (!db.Coffees.Any())
     {
         var oatMilk = db.Ingredients.First(i => i.Name == "Oat Milk");
@@ -156,7 +132,6 @@ using (var scope = app.Services.CreateScope())
                 Price       = 2.50m,
                 Description = "A strong, concentrated coffee shot.",
                 ImagePath   = "/images/espresso.jpg",
-              
                 CoffeeIngredients = new List<CoffeeIngredient>
                 {
                     new CoffeeIngredient { Ingredient = extraShot }
@@ -168,7 +143,6 @@ using (var scope = app.Services.CreateScope())
                 Price       = 3.50m,
                 Description = "Espresso with steamed milk and thick foam.",
                 ImagePath   = "/images/cappuccino.jpg",
- 
                 CoffeeIngredients = new List<CoffeeIngredient>
                 {
                     new CoffeeIngredient { Ingredient = oatMilk },
@@ -181,7 +155,6 @@ using (var scope = app.Services.CreateScope())
                 Price       = 4.00m,
                 Description = "Smooth espresso with vanilla and steamed milk.",
                 ImagePath   = "/images/latte.jpg",
-           
                 CoffeeIngredients = new List<CoffeeIngredient>
                 {
                     new CoffeeIngredient { Ingredient = vanillaSyrup },
@@ -194,7 +167,6 @@ using (var scope = app.Services.CreateScope())
                 Price       = 4.50m,
                 Description = "Espresso with caramel syrup and whipped cream.",
                 ImagePath   = "/images/macchiato.jpg",
-               
                 CoffeeIngredients = new List<CoffeeIngredient>
                 {
                     new CoffeeIngredient { Ingredient = caramelSyrup },
@@ -207,7 +179,6 @@ using (var scope = app.Services.CreateScope())
                 Price       = 3.00m,
                 Description = "Espresso diluted with hot water.",
                 ImagePath   = "/images/americano.jpg",
-                
                 CoffeeIngredients = new List<CoffeeIngredient>
                 {
                     new CoffeeIngredient { Ingredient = extraShot }
@@ -219,7 +190,6 @@ using (var scope = app.Services.CreateScope())
                 Price       = 3.80m,
                 Description = "Velvety espresso with microfoam milk.",
                 ImagePath   = "/images/flatwhite.jpg",
-                
                 CoffeeIngredients = new List<CoffeeIngredient>
                 {
                     new CoffeeIngredient { Ingredient = oatMilk },
@@ -233,6 +203,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// ── Middleware Pipeline ────────────────────────────────────
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -240,16 +211,14 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseStaticFiles();       
-app.UseRouting();           
+app.UseStaticFiles();
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
-
 
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
-
 
 app.MapControllers();
 
