@@ -69,21 +69,18 @@ var app = builder.Build();
 // ── Auto Migrate + Seed ────────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
-    // Run migrations automatically on startup
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-    // Seed roles
     foreach (var role in new[] { "Admin", "User" })
     {
         if (!await roleManager.RoleExistsAsync(role))
             await roleManager.CreateAsync(new IdentityRole(role));
     }
 
-    // Seed default admin
     var adminEmail = "admin@brewpoint.com";
     if (await userManager.FindByEmailAsync(adminEmail) == null)
     {
@@ -96,8 +93,6 @@ using (var scope = app.Services.CreateScope())
         await userManager.CreateAsync(admin, "Admin123!");
         await userManager.AddToRoleAsync(admin, "Admin");
     }
-
-    // Seed Ingredients
 
     if (!db.Ingredients.Any())
     {
@@ -115,7 +110,7 @@ using (var scope = app.Services.CreateScope())
         await db.SaveChangesAsync();
     }
 
-    // Seed Coffees
+
     if (!db.Coffees.Any())
     {
         var oatMilk = db.Ingredients.First(i => i.Name == "Oat Milk");
@@ -127,76 +122,18 @@ using (var scope = app.Services.CreateScope())
 
         var coffees = new List<Coffee>
         {
-            new Coffee
-            {
-                Name        = "Espresso",
-                Price       = 2.50m,
-                Description = "A strong, concentrated coffee shot.",
-                ImagePath   = "/images/espresso.jpg",
-                CoffeeIngredients = new List<CoffeeIngredient>
-                {
-                    new CoffeeIngredient { Ingredient = extraShot }
-                }
-            },
-            new Coffee
-            {
-                Name        = "Cappuccino",
-                Price       = 3.50m,
-                Description = "Espresso with steamed milk and thick foam.",
-                ImagePath   = "/images/cappuccino.jpg",
-                CoffeeIngredients = new List<CoffeeIngredient>
-                {
-                    new CoffeeIngredient { Ingredient = oatMilk },
-                    new CoffeeIngredient { Ingredient = cinnamon }
-                }
-            },
-            new Coffee
-            {
-                Name        = "Vanilla Latte",
-                Price       = 4.00m,
-                Description = "Smooth espresso with vanilla and steamed milk.",
-                ImagePath   = "/images/latte.jpg",
-                CoffeeIngredients = new List<CoffeeIngredient>
-                {
-                    new CoffeeIngredient { Ingredient = vanillaSyrup },
-                    new CoffeeIngredient { Ingredient = oatMilk }
-                }
-            },
-            new Coffee
-            {
-                Name        = "Caramel Macchiato",
-                Price       = 4.50m,
-                Description = "Espresso with caramel syrup and whipped cream.",
-                ImagePath   = "/images/macchiato.jpg",
-                CoffeeIngredients = new List<CoffeeIngredient>
-                {
-                    new CoffeeIngredient { Ingredient = caramelSyrup },
-                    new CoffeeIngredient { Ingredient = whippedCream }
-                }
-            },
-            new Coffee
-            {
-                Name        = "Americano",
-                Price       = 3.00m,
-                Description = "Espresso diluted with hot water.",
-                ImagePath   = "/images/americano.jpg",
-                CoffeeIngredients = new List<CoffeeIngredient>
-                {
-                    new CoffeeIngredient { Ingredient = extraShot }
-                }
-            },
-            new Coffee
-            {
-                Name        = "Flat White",
-                Price       = 3.80m,
-                Description = "Velvety espresso with microfoam milk.",
-                ImagePath   = "/images/flatwhite.jpg",
-                CoffeeIngredients = new List<CoffeeIngredient>
-                {
-                    new CoffeeIngredient { Ingredient = oatMilk },
-                    new CoffeeIngredient { Ingredient = extraShot }
-                }
-            }
+            new Coffee { Name = "Espresso", Price = 2.50m, Description = "A strong, concentrated coffee shot.", ImagePath = "/images/espresso.jpg",
+                CoffeeIngredients = new List<CoffeeIngredient> { new CoffeeIngredient { Ingredient = extraShot } } },
+            new Coffee { Name = "Cappuccino", Price = 3.50m, Description = "Espresso with steamed milk and thick foam.", ImagePath = "/images/cappuccino.jpg",
+                CoffeeIngredients = new List<CoffeeIngredient> { new CoffeeIngredient { Ingredient = oatMilk }, new CoffeeIngredient { Ingredient = cinnamon } } },
+            new Coffee { Name = "Vanilla Latte", Price = 4.00m, Description = "Smooth espresso with vanilla and steamed milk.", ImagePath = "/images/latte.jpg",
+                CoffeeIngredients = new List<CoffeeIngredient> { new CoffeeIngredient { Ingredient = vanillaSyrup }, new CoffeeIngredient { Ingredient = oatMilk } } },
+            new Coffee { Name = "Caramel Macchiato", Price = 4.50m, Description = "Espresso with caramel syrup and whipped cream.", ImagePath = "/images/macchiato.jpg",
+                CoffeeIngredients = new List<CoffeeIngredient> { new CoffeeIngredient { Ingredient = caramelSyrup }, new CoffeeIngredient { Ingredient = whippedCream } } },
+            new Coffee { Name = "Americano", Price = 3.00m, Description = "Espresso diluted with hot water.", ImagePath = "/images/americano.jpg",
+                CoffeeIngredients = new List<CoffeeIngredient> { new CoffeeIngredient { Ingredient = extraShot } } },
+            new Coffee { Name = "Flat White", Price = 3.80m, Description = "Velvety espresso with microfoam milk.", ImagePath = "/images/flatwhite.jpg",
+                CoffeeIngredients = new List<CoffeeIngredient> { new CoffeeIngredient { Ingredient = oatMilk }, new CoffeeIngredient { Ingredient = extraShot } } }
         };
 
         db.Coffees.AddRange(coffees);
